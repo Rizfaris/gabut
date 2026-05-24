@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive 3D Particle Visualizer</title>
+    <title>3D Interactive Text & Particle Visualizer</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     
@@ -17,7 +17,7 @@
         body {
             margin: 0;
             overflow: hidden;
-            background-color: #050505;
+            background-color: #040404;
             font-family: ui-sans-serif, system-ui, sans-serif;
             color: #fff;
         }
@@ -31,7 +31,6 @@
         #webcam {
             display: none;
         }
-        /* Kotak Kamera Mirror di Kanan Atas */
         #tracking-overlay {
             position: absolute;
             top: 24px;
@@ -39,8 +38,8 @@
             z-index: 10;
             border: 2px solid rgba(255, 255, 255, 0.2);
             border-radius: 12px;
-            background-color: rgba(0, 0, 0, 0.5);
-            transform: scaleX(-1); /* Efek Cermin */
+            background-color: rgba(0, 0, 0, 0.6);
+            transform: scaleX(-1);
         }
     </style>
 </head>
@@ -52,12 +51,12 @@
 
     <div class="absolute top-6 left-6 z-10 w-80 bg-black/50 backdrop-blur-md border border-white/10 rounded-2xl p-5 shadow-2xl">
         <div class="flex items-center justify-between mb-4">
-            <h1 class="text-lg font-bold tracking-wide bg-gradient-to-r bg-clip-text text-transparent from-indigo-400 to-pink-400">Quantum Core V2</h1>
-            <span id="fps-counter" class="text-xs font-mono bg-white/10 px-2 py-0.5 rounded text-cyan-300">-- FPS</span>
+            <h1 class="text-lg font-bold tracking-wide bg-gradient-to-r bg-clip-text text-transparent from-indigo-400 to-pink-400">Quantum Core Text</h1>
+            <span id="fps-counter" class="text-xs font-mono bg-white/10 px-2 py-0.5 rounded text-pink-300">-- FPS</span>
         </div>
         
         <p class="text-xs text-slate-400 mb-4 leading-relaxed border-b border-white/5 pb-3">
-            <strong class="text-pink-400">Right Hand Only:</strong> Kotak di kanan atas menampilkan kamera Anda. Hanya tangan kanan fisik yang diproses untuk menggerakkan partikel.
+            <strong class="text-pink-400">Right Hand Exclusive:</strong> Gunakan tangan kanan fisik Anda untuk menggeser, memutar, dan memperbesar partikel berbentuk tulisan teks 3D.
         </p>
 
         <div class="mb-5">
@@ -65,7 +64,7 @@
             <select id="preset-select" class="w-full bg-white/5 border border-white/10 text-sm rounded-lg p-2 text-white focus:outline-none focus:border-pink-500 cursor-pointer">
                 <option value="solar" selected>Solar System</option>
                 <option value="universe">Observable Universe</option>
-                <option value="love">I Love You</option>
+                <option value="love">I Love You (Teks 3D)</option>
             </select>
         </div>
 
@@ -74,7 +73,7 @@
                 <label class="block text-xs font-semibold tracking-wider text-slate-300 uppercase">Audio Reactivity</label>
                 <span id="audio-status" class="text-[10px] text-rose-400 font-mono uppercase">Inactive</span>
             </div>
-            <button id="audio-btn" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs py-2 px-4 rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-2 shadow-lg">
+            <button id="audio-btn" class="w-full bg-pink-600 hover:bg-pink-500 text-white font-medium text-xs py-2 px-4 rounded-lg transition duration-200 cursor-pointer flex items-center justify-center gap-2 shadow-lg shadow-pink-600/20">
                 Initialize Audio Spectrum
             </button>
         </div>
@@ -87,9 +86,10 @@
 
     <script>
         let scene, camera, renderer, particleSystem;
-        let particleCount = 20000; // Dikurangi sedikit agar performa lebih lancar di semua perangkat
+        let particleCount = 25000; 
         let currentPreset = 'solar';
 
+        // LERP Target & Current Variables
         let targetPositionX = 0, targetPositionY = 0, targetScale = 1.0, targetRotationZ = 0;
         let currentPositionX = 0, currentPositionY = 0, currentScale = 1.0, currentRotationZ = 0;
         const LERP_FACTOR = 0.08; 
@@ -104,6 +104,7 @@
             uPreset: { value: 0.0 } 
         };
 
+        // --- Shader Pipeline (GLSL) ---
         const vertexShader = `
             uniform float uTime;
             uniform float uAudioIntensity;
@@ -118,6 +119,7 @@
                 vec3 transformed = position;
                 
                 if (uPreset < 0.5) {
+                    // --- Solar System ---
                     float orbitRadius = length(position.xz);
                     float angle = uTime * aSpeed * 0.5 + aRandom.x * 6.28;
                     if (orbitRadius < 2.0) {
@@ -133,28 +135,32 @@
                     }
                 } 
                 else if (uPreset < 1.5) {
+                    // --- Observable Universe ---
                     float expansion = 1.0 + (uTime * 0.02) + (uAudioIntensity * 0.4);
                     transformed = position * expansion;
                     float dist = length(transformed);
-                    vColor = mix(vec3(0.1, 0.1, 0.5), vec3(0.8, 0.2, 0.6), clamp(dist / 30.0, 0.0, 1.0));
+                    vColor = mix(vec3(0.1, 0.2, 0.6), vec3(0.8, 0.1, 0.5), clamp(dist / 30.0, 0.0, 1.0));
                 } 
                 else {
-                    // --- PRESET I LOVE YOU (PINK) ---
-                    float radius = length(position.xy);
-                    float theta = uTime * 0.4 + (position.z * 0.05) + aRandom.y * 0.5;
-                    float pulse = 1.0 + sin(uTime * 2.0) * 0.1 + (uAudioIntensity * 0.2);
+                    // --- Teks 3D "I LOVE YOU" (Merespons Detak & Audio) ---
+                    float pulse = 1.0 + sin(uTime * 3.0) * 0.05 + (uAudioIntensity * 0.1);
+                    transformed.xy *= pulse;
                     
-                    transformed.x = cos(theta) * radius * pulse;
-                    transformed.y = sin(theta) * radius * pulse;
-                    transformed.z = position.z + sin(uTime * 1.5 + radius) * 1.0;
+                    // Efek dispersi/disintegrasi partikel acak bergelombang secara elegan pada sumbu Z
+                    transformed.z += sin(uTime * 2.0 + position.x * 0.2) * 0.5 * (1.0 + uAudioIntensity * 2.0);
                     
-                    vColor = mix(vec3(1.0, 0.4, 0.7), vec3(0.85, 0.05, 0.5), clamp(radius / 15.0, 0.0, 1.0));
-                    vColor += vec3(uAudioIntensity * 0.15);
+                    // Warna Gradasi Merah Muda Neon (Hot Pink ke Deep Rose)
+                    float factor = clamp((position.x + 15.0) / 30.0, 0.0, 1.0);
+                    vColor = mix(vec3(1.0, 0.3, 0.6), vec3(0.9, 0.05, 0.45), factor);
+                    vColor += vec3(uAudioIntensity * 0.2); // Berpendar putih saat ada audio hantaman
                 }
 
                 vec4 mvPosition = modelViewMatrix * vec4(transformed, 1.0);
                 gl_Position = projectionMatrix * mvPosition;
-                gl_PointSize = (aRandom.z * 4.0 + 1.5 + (uAudioIntensity * 3.0)) * (300.0 / -mvPosition.z);
+                
+                // Ukuran partikel teks dibuat konstan tajam agar hurufnya mudah dibaca
+                float sizeMultiplier = (uPreset > 1.5) ? 1.8 : 1.0;
+                gl_PointSize = (aRandom.z * 3.0 + 1.5 + (uAudioIntensity * 3.0)) * (300.0 / -mvPosition.z) * sizeMultiplier;
             }
         `;
 
@@ -166,18 +172,53 @@
                 if (dot(centerDist, centerDist) > 0.25) discard;
                 float alpha = pow(1.0 - (dot(centerDist, centerDist) * 4.0), 1.5);
                 if (vPreset > 1.5) {
-                    gl_FragColor = vec4(vColor * 1.4, alpha);
+                    gl_FragColor = vec4(vColor * 1.5, alpha * 0.95); // Glow teks intens
                 } else {
                     gl_FragColor = vec4(vColor, alpha * 0.8);
                 }
             }
         `;
 
+        // --- Fungsi Generator Teks ke Koordinat 3D ---
+        function generateTextCoordinates(text, count) {
+            const canvas2d = document.createElement('canvas');
+            const ctx2d = canvas2d.getContext('2d');
+            canvas2d.width = 512;
+            canvas2d.height = 128;
+
+            // Gambar teks dasar ke bitmap 2D
+            ctx2d.fillStyle = '#000000';
+            ctx2d.fillRect(0, 0, canvas2d.width, canvas2d.height);
+            ctx2d.fillStyle = '#FFFFFF';
+            ctx2d.font = 'bold 70px sans-serif';
+            ctx2d.textAlign = 'center';
+            ctx2d.textBaseline = 'middle';
+            ctx2d.fillText(text, canvas2d.width / 2, canvas2d.height / 2);
+
+            const imgData = ctx2d.getImageData(0, 0, canvas2d.width, canvas2d.height).data;
+            const validPoints = [];
+
+            // Kumpulkan piksel putih (area teks)
+            for (let y = 0; y < canvas2d.height; y += 1) {
+                for (let x = 0; x < canvas2d.width; x += 1) {
+                    const idx = (y * canvas2d.width + x) * 4;
+                    if (imgData[idx] > 128) { // Jika piksel berwarna putih
+                        validPoints.push({
+                            // Konversi koordinat matriks 2D kanvas ke skala koordinat 3D Three.js
+                            x: (x - canvas2d.width / 2) * 0.08,
+                            y: (canvas2d.height / 2 - y) * 0.08
+                        });
+                    }
+                }
+            }
+            return validPoints;
+        }
+
         function initThree() {
             try {
                 const canvas = document.getElementById('visualizer-canvas');
                 scene = new THREE.Scene();
-                scene.fog = new THREE.FogExp2(0x050505, 0.02);
+                scene.fog = new THREE.FogExp2(0x040404, 0.015);
 
                 camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
                 camera.position.z = 30;
@@ -193,7 +234,7 @@
                 window.addEventListener('resize', onWindowResize);
                 document.getElementById('particle-count').innerText = particleCount.toLocaleString();
             } catch (e) {
-                alert("Gagal menginisialisasi WebGL Grafis: " + e.message);
+                console.error(e);
             }
         }
 
@@ -204,6 +245,11 @@
             const positions = new Float32Array(particleCount * 3);
             const speeds = new Float32Array(particleCount);
             const randoms = new Float32Array(particleCount * 3);
+
+            let textPoints = [];
+            if (currentPreset === 'love') {
+                textPoints = generateTextCoordinates("I LOVE YOU", particleCount);
+            }
 
             for (let i = 0; i < particleCount; i++) {
                 const i3 = i * 3;
@@ -231,12 +277,18 @@
                     positions[i3] = r * Math.sin(phi) * Math.cos(theta);
                     positions[i3 + 1] = r * Math.sin(phi) * Math.sin(theta);
                     positions[i3 + 2] = r * Math.cos(phi);
-                } else {
-                    const radius = Math.random() * 15.0 + 1.0;
-                    const angle = Math.random() * Math.PI * 2;
-                    positions[i3] = Math.cos(angle) * radius;
-                    positions[i3 + 1] = Math.sin(angle) * radius;
-                    positions[i3 + 2] = (Math.random() - 0.5) * 10.0;
+                } else if (currentPreset === 'love') {
+                    // Petakan partikel secara rekursif ke susunan koordinat teks yang valid
+                    if (textPoints.length > 0) {
+                        const pt = textPoints[i % textPoints.length];
+                        positions[i3] = pt.x + (Math.random() - 0.5) * 0.1; // Sedikit jitter agar organik
+                        positions[i3 + 1] = pt.y + (Math.random() - 0.5) * 0.1;
+                        positions[i3 + 2] = (Math.random() - 0.5) * 1.5; // Kedalaman ketebalan huruf 3D
+                    } else {
+                        positions[i3] = (Math.random() - 0.5) * 20;
+                        positions[i3 + 1] = (Math.random() - 0.5) * 10;
+                        positions[i3 + 2] = 0;
+                    }
                 }
             }
 
@@ -257,6 +309,7 @@
             scene.add(particleSystem);
         }
 
+        // --- Kamera & Filter Deteksi Eksklusif Tangan Kanan ---
         function onHandResults(results) {
             const statusEl = document.getElementById('tracking-status');
             let rightHandFound = false;
@@ -271,13 +324,12 @@
                     const classification = results.multiHandedness[i];
                     const landmarks = results.multiHandLandmarks[i];
 
-                    // Klasifikasi 'Left' di MediaPipe non-flipped adalah tangan kanan fisik kita
+                    // Tangan kanan fisik diidentifikasi sebagai 'Left' di internal non-flipped MediaPipe
                     if (classification.label === 'Left') {
                         rightHandFound = true;
                         statusEl.innerText = "Tangan Kanan Aktif";
                         statusEl.className = "text-emerald-400 font-bold";
 
-                        // Gambar Garis Tracker
                         if (window.drawConnectors && window.drawLandmarks) {
                             drawConnectors(trackingCtx, landmarks, HAND_CONNECTIONS, {color: '#00F0FF', lineWidth: 2});
                             drawLandmarks(trackingCtx, landmarks, {color: '#FF0077', lineWidth: 1, radius: 2});
@@ -288,15 +340,18 @@
                         const indexTip = landmarks[8];
                         const middleTip = landmarks[12];
 
+                        // Translasi pergerakan partikel (X, Y)
                         targetPositionX = (wrist.x - 0.5) * -30.0; 
                         targetPositionY = (0.5 - wrist.y) * 20.0;
 
+                        // Jarak cubitan jempol-telunjuk mengatur ukuran skala (Scale)
                         const dx = indexTip.x - thumbTip.x, dy = indexTip.y - thumbTip.y, dz = indexTip.z - thumbTip.z;
                         targetScale = THREE.MathUtils.clamp(Math.sqrt(dx*dx + dy*dy + dz*dz) * 6.0, 0.3, 3.0);
 
+                        // Kemiringan pergelangan mengatur rotasi rotasi Z (Rotation)
                         const rotY = middleTip.y - wrist.y, rotX = middleTip.x - wrist.x;
                         targetRotationZ = Math.atan2(rotY, rotX) + Math.PI / 2;
-                        break;
+                        break; // Abaikan tangan kedua (tangan kiri)
                     }
                 }
             }
@@ -308,12 +363,14 @@
             }
         }
 
+        // --- Loop Render Grafis & LERP Smoothing ---
         function animate() {
             requestAnimationFrame(animate);
 
             const clockTime = performance.now() * 0.001;
             customUniforms.uTime.value = clockTime;
 
+            // Penerapan Interpolasi Linear Kontinu (LERP)
             currentPositionX += (targetPositionX - currentPositionX) * LERP_FACTOR;
             currentPositionY += (targetPositionY - currentPositionY) * LERP_FACTOR;
             currentScale     += (targetScale - currentScale) * LERP_FACTOR;
@@ -324,8 +381,16 @@
                 particleSystem.position.y = currentPositionY;
                 particleSystem.scale.setScalar(currentScale);
                 particleSystem.rotation.z = currentRotationZ;
-                particleSystem.rotation.y = clockTime * 0.05;
-                particleSystem.rotation.x = clockTime * 0.02;
+                
+                // Rotasi orbit konstan hanya aktif pada Solar dan Universe agar teks "I LOVE YOU" tidak terbalik saat dibaca
+                if (currentPreset !== 'love') {
+                    particleSystem.rotation.y = clockTime * 0.05;
+                    particleSystem.rotation.x = clockTime * 0.02;
+                } else {
+                    // Untuk teks, biarkan dia menghadap ke depan, hanya beri sedikit goyangan statis yang elegan
+                    particleSystem.rotation.y = sin(clockTime * 0.5) * 0.1;
+                    particleSystem.rotation.x = 0;
+                }
             }
 
             if (isAudioInitialized && analyser) {
@@ -338,7 +403,7 @@
 
             renderer.render(scene, camera);
             
-            // Hitung FPS
+            // Hitung FPS Profiler
             frameCount++;
             const time = performance.now();
             if (time >= lastTime + 1000) {
@@ -348,79 +413,4 @@
         }
 
         function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        function initAudio() {
-            if (isAudioInitialized) return;
-            navigator.mediaDevices.getUserMedia({ audio: true, video: false })
-                .then(stream => {
-                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                    const source = audioContext.createMediaStreamSource(stream);
-                    analyser = audioContext.createAnalyser();
-                    analyser.fftSize = 256;
-                    dataArray = new Uint8Array(analyser.frequencyBinCount);
-                    source.connect(analyser);
-                    isAudioInitialized = true;
-                    document.getElementById('audio-status').innerText = "Live Active";
-                    document.getElementById('audio-status').className = "text-emerald-400 font-mono uppercase";
-                    document.getElementById('audio-btn').style.display = 'none';
-                }).catch(err => {
-                    alert("Gagal mengakses mikrofon: " + err.message);
-                });
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            initThree();
-            animate();
-
-            document.getElementById('preset-select').addEventListener('change', (e) => {
-                currentPreset = e.target.value;
-                if (currentPreset === 'solar') customUniforms.uPreset.value = 0.0;
-                else if (currentPreset === 'universe') customUniforms.uPreset.value = 1.0;
-                else customUniforms.uPreset.value = 2.0; 
-                buildParticleGeometry();
-            });
-
-            document.getElementById('audio-btn').addEventListener('click', initAudio);
-
-            // Inisialisasi MediaPipe Hands
-            try {
-                const videoElement = document.getElementById('webcam');
-                const hands = new Hands({
-                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-                });
-
-                hands.setOptions({
-                    maxNumHands: 2,
-                    modelComplexity: 1,
-                    minDetectionConfidence: 0.5,
-                    minTrackingConfidence: 0.5
-                });
-
-                hands.onResults(onHandResults);
-
-                const cameraUtils = new Camera(videoElement, {
-                    onFrame: async () => {
-                        await hands.send({ image: videoElement });
-                    },
-                    width: 640,
-                    height: 480
-                });
-
-                cameraUtils.start().then(() => {
-                    document.getElementById('tracking-status').innerText = "Mencari Tangan...";
-                }).catch(err => {
-                    alert("Kamera tidak ditemukan atau diblokir oleh browser. Silakan izinkan akses kamera.");
-                    document.getElementById('tracking-status').innerText = "Kamera Diblokir";
-                });
-
-            } catch (err) {
-                alert("Gagal memuat sistem pelacakan MediaPipe: " + err.message);
-            }
-        });
-    </script>
-</body>
-</html>
+            camera.aspect = window.i
